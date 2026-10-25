@@ -10,10 +10,13 @@ class Prefs(context: Context) {
         get() = prefs.getBoolean("enabled", false)
         set(value) = prefs.edit { putBoolean("enabled", value) }
 
-    // Keyed per model so a value tuned for the old placeholder model does not carry over.
-    var threshold: Float
-        get() = prefs.getFloat("threshold_hey_grok", WakeModel.DEFAULT_THRESHOLD)
-        set(value) = prefs.edit { putFloat("threshold_hey_grok", value) }
+    var phrase: WakePhrase
+        get() = WakePhrase.fromKey(prefs.getString("wake_phrase", null))
+        set(value) = prefs.edit { putString("wake_phrase", value.name) }
+
+    fun threshold(phrase: WakePhrase): Float = prefs.getFloat(phrase.thresholdKey, phrase.defaultThreshold)
+
+    fun setThreshold(phrase: WakePhrase, value: Float) = prefs.edit { putFloat(phrase.thresholdKey, value) }
 
     var chime: Boolean
         get() = prefs.getBoolean("chime", true)

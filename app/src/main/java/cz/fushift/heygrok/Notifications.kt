@@ -21,7 +21,7 @@ object Notifications {
     private const val CHANNEL_WAKE = "wake_word"
     private const val CHANNEL_STARTUP = "startup"
 
-    fun listening(context: Context): Notification {
+    fun listening(context: Context, phrase: WakePhrase): Notification {
         val stop = PendingIntent.getService(
             context,
             0,
@@ -29,11 +29,15 @@ object Notifications {
             PendingIntent.FLAG_IMMUTABLE,
         )
         return builder(context, CHANNEL_LISTENING)
-            .setContentText("Listening for the wake word")
+            .setContentText("Listening for \"${phrase.label}\"")
             .setContentIntent(openApp(context))
             .setOngoing(true)
             .addAction(0, "Stop", stop)
             .build()
+    }
+
+    fun updateListening(context: Context, phrase: WakePhrase) {
+        post(context, LISTENING_ID, listening(context, phrase))
     }
 
     fun canUseFullScreenIntent(context: Context): Boolean =

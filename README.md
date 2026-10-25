@@ -9,16 +9,26 @@ An Android app that listens on-device for a wake phrase and, when it hears it, o
 
 - UNTESTED on a real device or emulator. It was built, linted and unit-tested on a Linux box only (the
   emulator would not boot there).
-- The wake phrase is "Hey Grok", detected by a model trained on the build box from synthetic speech (see
-  "The hey grok model" below). It has been evaluated on synthetic speech only, not on real voices.
+- The wake phrase is picked in the app: "Hey Grok" (default) or "Hey Jarvis".
+  - Hey Grok: a model trained on the build box from synthetic speech (see "The hey grok model" below). It has
+    been evaluated on synthetic speech only, not on real voices.
+  - Hey Jarvis: openWakeWord's pretrained `hey_jarvis_v0.1`.
+- Each phrase keeps its own threshold. Switching applies live, without restarting the service, and is saved
+  for app restarts and the boot prompt.
 
 What was verified on the build box:
 
 - `./gradlew assembleDebug` and `./gradlew lint` pass (lint: 0 errors).
-- `:wakeword:test` runs the same three ONNX models through `WakeWordDetector` on the JVM against TTS clips:
-  "Hey Grok" in two voices held out from training (must score above 0.9), "Hey Jarvis" in two voices and an
-  unrelated sentence (must score below 0.2). Python reference (openwakeword 0.6.0, ONNX) max scores on the
-  same files: 1.000 and 1.000 for the "Hey Grok" clips, 0.095 to 0.097 for the others.
+- `:wakeword:test` runs the ONNX models through `WakeWordDetector` on the JVM against TTS clips:
+  - Hey Grok model: "Hey Grok" in two voices held out from training (must score above 0.9), "Hey Jarvis" in
+    two voices and an unrelated sentence (must score below 0.2). Python reference (openwakeword 0.6.0, ONNX)
+    max scores on the same files: 1.000 and 1.000 for the "Hey Grok" clips, 0.095 to 0.097 for the others.
+  - Hey Jarvis model: the two "Hey Jarvis" clips must score above 0.5, a "Hey Grok" clip and the unrelated
+    sentence below 0.2.
+  - Both models: 3 s of silence and 3 s of seeded white noise must score below 0.2.
+  - A detector switched from the Hey Grok to the Hey Jarvis model (`setWakeModel`) must score "Hey Jarvis"
+    above 0.5.
+- `:app:testDebugUnitTest`: `WakePhrase` key lookup, distinct threshold keys, and that every model asset exists.
 - The settings screen renders in light and dark mode (Paparazzi snapshots in `app/src/test/snapshots/images/`).
 
 Not verified: microphone capture, the foreground service, notifications, the boot prompt, permissions, the
@@ -48,8 +58,13 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 2. Audio is split into 80 ms frames of 1280 samples.
 3. `melspectrogram.onnx` turns each frame (plus 480 samples of left context) into 32-bin mel frames.
 4. `embedding_model.onnx` maps a 76-frame mel window to a 96-dimensional embedding, one per audio frame.
-5. The wake model (`wakeword.onnx`) scores the last 16 embeddings (about 1.3 s of audio).
-6. If the score reaches the threshold set in the app (default 0.90), the app optionally chimes and opens Grok.
+5. The wake model for the selected phrase (`wakeword_hey_grok.onnx` or `wakeword_hey_jarvis.onnx`) scores the
+   last 16 embeddings (about 1.3 s of audio).
+6. If the score reaches that phrase's threshold set in the app (defaults: Hey Grok 0.90; Hey Jarvis 0.50,
+   openWakeWord's standard default), the app optionally chimes and opens Grok.
+
+Changing the phrase in the app is picked up by the running service on the next 80 ms frame: it swaps the wake
+model and updates the "Listening for ..." notification.
 
 The pipeline is a Kotlin port of openWakeWord 0.6.0's streaming feature extraction and lives in the
 `:wakeword` module (`WakeWordDetector`), which is a plain JVM library so it can be tested without a device.
@@ -99,7 +114,7 @@ an invisible activity that turns the screen on, shows over the keyguard and asks
 
 ## The hey grok model
 
-`app/src/main/assets/wakeword.onnx` was trained on the build box's CPU (no GPU) with the scripts in
+`app/src/main/assets/wakeword_hey_grok.onnx` was trained on the build box's CPU (no GPU) with the scripts in
 `training/`. It uses openWakeWord's model format and its frozen feature models, so only the small classifier
 on top is new.
 
@@ -109,20 +124,20 @@ All test speech is synthetic: Piper TTS voices and speakers that were not used f
 streamed through openwakeword 0.6.0 in 80 ms frames with 1 s of silence on each side, and the clip's maximum
 score is compared with the threshold.
 
-| | Hey Grok, threshold 0.9 (default) | Hey Grok, threshold 0.5 | Previous placeholder hey_jarvis_v0.1, 0.5 |
+| | Hey Grok, threshold 0.9 (default) | Hey Grok, threshold 0.5 | Hey Jarvis (hey_jarvis_v0.1), 0.5 (default) |
 |---|---|---|---|
 | Recall, clean (600 clips) | 0.957 | 0.965 | 0.965 |
 | Recall, pink noise at 10 dB SNR | 0.813 | 0.860 | 0.963 |
 | False accepts on similar phrases and other speech (1,300 clips) | 0.032 | 0.045 | 0.001 |
 | False triggers per hour (10.7 h of mixed background audio) | 0.19 | 0.47 | 0.47 |
 
-- The placeholder column measures "Hey Jarvis" clips from the same held-out voices, so it is a rough
-  reference, not a like-for-like comparison.
+- The Hey Jarvis column measures "Hey Jarvis" clips from the same held-out voices with the bundled Hey Jarvis
+  model, so it is a rough reference, not a like-for-like comparison.
 - False triggers: openWakeWord's `validation_set_features.npy` (speech, music and noise), counting score
   crossings at least 2 s apart.
 - Weak spots: phrases that sound almost the same still trigger, e.g. "hey grog", "hey grub", "hey crock",
   "hey crook", "hey greg" and "I grok it now" all reach about 1.0. Noise lowers recall more than it does for
-  the placeholder.
+  Hey Jarvis.
 - Not measured: real voices, accents beyond the TTS voices, far-field speech and real rooms.
 - Default threshold 0.9: it keeps false triggers to about one every five hours on the validation audio while
   losing under 1 point of clean recall (about 5 points in noise). Lower it in the app if it misses you.
@@ -165,6 +180,12 @@ triggers but only 0.71 recall in noise, so the bigger, longer run was kept.
   training speech come from non-commercial datasets (l2arctic: CC BY-NC 4.0; ryan: CC BY-NC-SA 4.0; lessac:
   Blizzard 2013 licence). Treat the model as non-commercial use only. openWakeWord's own pretrained models
   carry CC BY-NC-SA 4.0 for the same reason.
+- The Hey Jarvis model `wakeword_hey_jarvis.onnx` is openWakeWord's pretrained `hey_jarvis_v0.1` (David
+  Scripka, https://github.com/dscripka/openWakeWord, release v0.5.1), unmodified. openWakeWord's README: "All
+  of the included pre-trained models are licensed under the Creative Commons
+  Attribution-NonCommercial-ShareAlike 4.0 International license"
+  (https://creativecommons.org/licenses/by-nc-sa/4.0/).
+- Both wake models: non-commercial use only.
 - The test WAVs `hey_grok_kristin.wav` (public-domain dataset) and `hey_grok_joe.wav` (CC0 dataset) were
   synthesised with Piper.
 - openWakeWord code and its feature models (`melspectrogram.onnx`, `embedding_model.onnx`) are Apache-2.0.

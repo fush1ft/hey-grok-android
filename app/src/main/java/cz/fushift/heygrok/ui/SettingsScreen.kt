@@ -32,7 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cz.fushift.heygrok.GrokLauncher
 import cz.fushift.heygrok.LiveState
 import cz.fushift.heygrok.Prefs
-import cz.fushift.heygrok.WakeModel
+import cz.fushift.heygrok.WakePhrase
 import cz.fushift.heygrok.WakeWordService
 import kotlinx.coroutines.delay
 import java.util.Locale
@@ -42,6 +42,7 @@ private const val DETECTED_BADGE_MS = 2000L
 data class SettingsUiState(
     val listening: Boolean,
     val running: Boolean,
+    val phrase: WakePhrase,
     val threshold: Float,
     val score: Float,
     val detected: Boolean,
@@ -55,7 +56,8 @@ fun SettingsRoute(onOpenOnboarding: () -> Unit) {
     val context = LocalContext.current
     val prefs = remember { Prefs(context) }
     var listening by remember { mutableStateOf(prefs.enabled) }
-    var threshold by remember { mutableFloatStateOf(prefs.threshold) }
+    var phrase by remember { mutableStateOf(prefs.phrase) }
+    var threshold by remember { mutableFloatStateOf(prefs.threshold(phrase)) }
     var chime by remember { mutableStateOf(prefs.chime) }
     var startOnBoot by remember { mutableStateOf(prefs.startOnBoot) }
     var grokInstalled by remember { mutableStateOf(GrokLauncher.isGrokInstalled(context)) }
@@ -87,6 +89,7 @@ fun SettingsRoute(onOpenOnboarding: () -> Unit) {
         state = SettingsUiState(
             listening = listening,
             running = running,
+            phrase = phrase,
             threshold = threshold,
             score = score,
             detected = detected,
@@ -100,9 +103,14 @@ fun SettingsRoute(onOpenOnboarding: () -> Unit) {
             val intent = Intent(context, WakeWordService::class.java)
             if (on) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
         },
+        onPhraseChange = {
+            prefs.phrase = it
+            phrase = it
+            threshold = prefs.threshold(it)
+        },
         onThresholdChange = {
             threshold = it
-            prefs.threshold = it
+            prefs.setThreshold(phrase, it)
         },
         onChimeChange = {
             chime = it
@@ -121,6 +129,7 @@ fun SettingsRoute(onOpenOnboarding: () -> Unit) {
 fun SettingsScreen(
     state: SettingsUiState,
     onListeningChange: (Boolean) -> Unit,
+    onPhraseChange: (WakePhrase) -> Unit,
     onThresholdChange: (Float) -> Unit,
     onChimeChange: (Boolean) -> Unit,
     onStartOnBootChange: (Boolean) -> Unit,
@@ -129,13 +138,15 @@ fun SettingsScreen(
 ) {
     Page {
         PageHeader("Wake word")
-        BodyText(
-            if (WakeModel.IS_PLACEHOLDER) {
-                "Placeholder model: say \"${WakeModel.PHRASE}\". Drop a trained hey_grok model in to use \"Hey Grok\"."
-            } else {
-                "Say \"${WakeModel.PHRASE}\" to open Grok."
-            },
-        )
+        BodyText("Say \"${state.phrase.label}\" to open Grok.")
+
+        FlatCard(title = "Wake phrase") {
+            SegmentedChoice(WakePhrase.entries, state.phrase, { it.label }, onPhraseChange)
+            Caption(
+                "Both models are for non-commercial use only. " +
+                    "Hey Jarvis is openWakeWord's pretrained model, licensed CC BY-NC-SA 4.0.",
+            )
+        }
 
         FlatCard(
             title = "Listening",
@@ -157,6 +168,9 @@ fun SettingsScreen(
                 colors = monochromeSliderColors(),
             )
             Caption("Lower = triggers more easily, more false alarms.")
+            Caption(
+                "Default ${String.format(Locale.ROOT, "%.2f", state.phrase.defaultThreshold)} for ${state.phrase.label}.",
+            )
         }
 
         FlatCard(
@@ -232,6 +246,7 @@ private fun ScoreMeter(score: Float, threshold: Float) {
 private val PreviewState = SettingsUiState(
     listening = true,
     running = true,
+    phrase = WakePhrase.HEY_GROK,
     threshold = 0.9f,
     score = 0.97f,
     detected = true,
@@ -243,7 +258,7 @@ private val PreviewState = SettingsUiState(
 @Composable
 private fun SettingsPreviewContent() {
     HeyGrokTheme {
-        SettingsScreen(PreviewState, {}, {}, {}, {}, {}, {})
+        SettingsScreen(PreviewState, {}, {}, {}, {}, {}, {}, {})
     }
 }
 

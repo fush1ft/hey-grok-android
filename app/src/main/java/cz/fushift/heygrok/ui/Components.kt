@@ -17,7 +17,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SliderColors
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
@@ -168,6 +172,32 @@ fun SwitchRow(text: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit
                 uncheckedBorderColor = colors.outline,
             ),
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun <T> SegmentedChoice(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, option ->
+            SegmentedButton(
+                selected = option == selected,
+                onClick = { onSelect(option) },
+                shape = SegmentedButtonDefaults.itemShape(index, options.size, MaterialTheme.shapes.small),
+                colors = SegmentedButtonDefaults.colors(
+                    activeContainerColor = colors.onSurface,
+                    activeContentColor = colors.surface,
+                    activeBorderColor = colors.outline,
+                    inactiveContainerColor = colors.surface,
+                    inactiveContentColor = colors.onSurface,
+                    inactiveBorderColor = colors.outline,
+                ),
+                icon = {},
+            ) {
+                Text(label(option), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            }
+        }
     }
 }
 
