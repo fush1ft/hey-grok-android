@@ -11,14 +11,17 @@ class WakeWordDetectorTest {
 
     private val assets = File("../app/src/main/assets")
 
+    // Voices held out from training (Piper en_US kristin and joe).
     @Test
-    fun heyJarvisTriggers() {
-        assertTrue(maxScore("hey_jarvis.wav") > 0.5f)
+    fun heyGrokTriggers() {
+        assertTrue(maxScore("hey_grok_kristin.wav") > 0.9f)
+        assertTrue(maxScore("hey_grok_joe.wav") > 0.9f)
     }
 
     @Test
-    fun heyJarvisBritishTriggers() {
-        assertTrue(maxScore("hey_jarvis_gb.wav") > 0.5f)
+    fun heyJarvisDoesNotTrigger() {
+        assertTrue(maxScore("hey_jarvis.wav") < 0.2f)
+        assertTrue(maxScore("hey_jarvis_gb.wav") < 0.2f)
     }
 
     @Test

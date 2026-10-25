@@ -28,8 +28,8 @@ class SettingsScreenshotTest(private val dark: Boolean) {
                     state = SettingsUiState(
                         listening = true,
                         running = true,
-                        threshold = 0.5f,
-                        score = 0.62f,
+                        threshold = 0.9f,
+                        score = 0.97f,
                         detected = true,
                         chime = true,
                         startOnBoot = false,
