@@ -7,13 +7,33 @@ An Android app that listens on-device for a wake phrase and, when it hears it, o
 
 ## Status
 
-- UNTESTED on a real device. It was built and unit-tested on a Linux box only.
+- UNTESTED on a real device or emulator. It was built, linted and unit-tested on a Linux box only (the
+  emulator would not boot there).
 - The bundled wake model is a placeholder: openWakeWord's pretrained "hey_jarvis_v0.1". Say "Hey Jarvis",
   not "Hey Grok". See "Training a real hey grok model" below.
 
+What was verified on the build box:
+
+- `./gradlew assembleDebug` and `./gradlew lint` pass (lint: 0 errors).
+- `:wakeword:test` runs the same three ONNX models through `WakeWordDetector` on the JVM against TTS clips.
+  Max scores, compared with the Python reference (openwakeword 0.6.0, ONNX) on the same files:
+
+  | Clip | Kotlin | Python |
+  |---|---|---|
+  | `hey_jarvis.wav` (US voice) | 0.999 | 0.999 |
+  | `hey_jarvis_gb.wav` (UK voice) | 0.996 | 0.997 |
+  | `negative_speech.wav` | 0.009 | 0.036 |
+
+  The negative clip differs because the reference pre-fills its buffer with embeddings of random noise.
+- The settings screen renders in light and dark mode (Paparazzi snapshots in `app/src/test/snapshots/images/`).
+
+Not verified: microphone capture, the foreground service, notifications, the boot prompt, permissions and
+opening Grok Bot on an actual Android device.
+
 ## Build
 
-Requirements: JDK 17 and the Android SDK with platform 35.
+Requirements: JDK 17 and the Android SDK with platform 35. The APK ships ONNX Runtime for `arm64-v8a`
+(phones) and `x86_64` (emulator) only; 32-bit ARM devices are not supported.
 
 ```
 ./gradlew assembleDebug                  # APK: app/build/outputs/apk/debug/app-debug.apk
@@ -102,8 +122,8 @@ about 2 GB of free RAM, and about 17 GB of training features to download). The s
 - Android 14 and later: a microphone foreground service can only be started while the app is visible or from
   a notification tap, and never from `BOOT_COMPLETED`. That is why "Offer to start after reboot" posts a
   "Tap to start listening" notification instead of starting directly.
-- The service is `START_NOT_STICKY`: a system restart from the background would get no mic access, so if the
-  system kills it, start it again from the app.
+- The service is `START_NOT_STICKY`: a system restart from the background would get no mic access. If the
+  system kills it, opening the app restarts listening (the app is visible then, so this is allowed).
 - Background activity launch rules: without "Display over other apps", Grok opens only after you tap the
   notification.
 - OEM battery killers (Xiaomi/MIUI/HyperOS, Samsung, Huawei, OnePlus, Oppo/Vivo) may stop the service. Allow
