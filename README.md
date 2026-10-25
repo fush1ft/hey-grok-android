@@ -27,8 +27,8 @@ What was verified on the build box:
   The negative clip differs because the reference pre-fills its buffer with embeddings of random noise.
 - The settings screen renders in light and dark mode (Paparazzi snapshots in `app/src/test/snapshots/images/`).
 
-Not verified: microphone capture, the foreground service, notifications, the boot prompt, permissions and
-opening Grok Bot on an actual Android device.
+Not verified: microphone capture, the foreground service, notifications, the boot prompt, permissions, the
+lock-screen flow and opening Grok Bot on an actual Android device.
 
 ## Build
 
@@ -62,13 +62,46 @@ The pipeline is a Kotlin port of openWakeWord 0.6.0's streaming feature extracti
 
 ## How Grok Bot is opened
 
-- The app sends `Intent.ACTION_ASSIST` targeted at `ai.x.grok.bot`. In Grok Bot 1.17.0 this resolves to
-  `expo.modules.nativehelpers.AssistTrampolineActivity`, which was found in that version's manifest. It is not
-  a documented public API and may change or disappear in any update.
-- If that intent does not resolve, the app falls back to Grok Bot's normal launch intent.
-- Android 10 and later block apps from starting activities from the background. If "Display over other apps"
-  is granted, the app starts Grok directly. Otherwise a detection posts a notification "Heard the wake word,
-  tap to open Grok".
+- The app first tries `Intent.ACTION_ASSIST` targeted at `ai.x.grok.bot`. Grok Bot 1.17.0's manifest has
+  `expo.modules.nativehelpers.AssistTrampolineActivity` for it, but ships it `enabled="false"`, so the intent
+  does not resolve unless Grok enables that component at runtime. It is not a documented public API.
+- In practice the app uses Grok Bot's normal launch intent.
+- What happens on a detection, in order:
+  1. Grok Bot not installed: a "Grok Bot is not installed" notification.
+  2. Phone locked or screen off: see "Lock screen" below.
+  3. Unlocked and screen on: Android 10 and later block apps from starting activities from the background. If
+     "Display over other apps" is granted, the app starts Grok directly. Otherwise it posts a notification
+     "Heard the wake word, tap to open Grok".
+- "Open Grok now" in the app starts Grok directly (the app is visible then).
+
+## Lock screen
+
+When the phone is locked or the screen is off, the app does not start Grok itself. It starts `UnlockActivity`,
+an invisible activity that turns the screen on, shows over the keyguard and asks the system to dismiss it
+(`requestDismissKeyguard`). Once the keyguard is gone, it opens Grok. How `UnlockActivity` is started:
+
+1. Full-screen notifications allowed: a full-screen notification "Heard the wake word, unlock to open Grok",
+   which the system shows by launching `UnlockActivity`.
+2. Otherwise, "Display over other apps" allowed: the app starts `UnlockActivity` directly.
+3. Otherwise: the "tap to open Grok" notification, whose tap also goes through `UnlockActivity`.
+
+| Lock | Screen off / locked, full-screen notifications allowed | Not allowed, overlay allowed | Neither |
+|---|---|---|---|
+| None / swipe | Screen turns on, keyguard dismissed, Grok opens | Same (if the activity start over the keyguard is allowed) | Notification; tap opens Grok |
+| PIN / pattern / password | Screen turns on, unlock prompt; Grok opens after unlock | Same | Notification on the lock screen; tap, unlock, Grok opens |
+| Fingerprint / face | As PIN, unlock with biometrics; face unlock with "skip lock screen" may be near-instant | Same | As PIN |
+
+- Listening continues while locked: the microphone service was started from the foreground and keeps mic access.
+- Permissions involved:
+  - `USE_FULL_SCREEN_INTENT`: on Android 14 and later, sideloaded apps are denied by default. Grant it in
+    Settings > Apps > Special app access > Full-screen notifications (the setup screen links there).
+  - `SYSTEM_ALERT_WINDOW` ("Display over other apps").
+  - Android 13 and later grey out both switches for sideloaded apps until you allow restricted settings:
+    App info > menu (three dots) > Allow restricted settings.
+- Grok Bot cannot show over the keyguard: its 1.17.0 manifest has no `showWhenLocked`, and its assist activity
+  and VoiceInteractionService ship disabled. With a secure lock you always unlock first. Smart Lock can skip the
+  PIN in trusted places.
+- Untested on a real device.
 
 ## Wake word model and licences
 
@@ -124,8 +157,8 @@ about 2 GB of free RAM, and about 17 GB of training features to download). The s
   "Tap to start listening" notification instead of starting directly.
 - The service is `START_NOT_STICKY`: a system restart from the background would get no mic access. If the
   system kills it, opening the app restarts listening (the app is visible then, so this is allowed).
-- Background activity launch rules: without "Display over other apps", Grok opens only after you tap the
-  notification.
+- Background activity launch rules: while unlocked and without "Display over other apps", Grok opens only after
+  you tap the notification. On the lock screen, see "Lock screen".
 - OEM battery killers (Xiaomi/MIUI/HyperOS, Samsung, Huawei, OnePlus, Oppo/Vivo) may stop the service. Allow
   unrestricted battery use, lock the app in recents, and see https://dontkillmyapp.com.
 - Power use: the microphone and about 12.5 inferences per second run continuously. Expect noticeable battery

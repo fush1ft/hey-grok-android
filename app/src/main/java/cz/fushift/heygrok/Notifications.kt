@@ -2,12 +2,15 @@ package cz.fushift.heygrok
 
 import android.annotation.SuppressLint
 import android.app.Notification
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.getSystemService
 
 object Notifications {
     const val LISTENING_ID = 1
@@ -33,23 +36,41 @@ object Notifications {
             .build()
     }
 
-    fun showOpenGrok(context: Context, grokIntent: Intent) {
-        val open = PendingIntent.getActivity(
-            context,
-            0,
-            grokIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
+    fun canUseFullScreenIntent(context: Context): Boolean =
+        NotificationManagerCompat.from(context).areNotificationsEnabled() &&
+            (Build.VERSION.SDK_INT < 34 || context.getSystemService<NotificationManager>()!!.canUseFullScreenIntent())
+
+    fun showOpenGrok(context: Context) {
         post(
             context,
             WAKE_ID,
             builder(context, CHANNEL_WAKE)
                 .setContentText("Heard the wake word, tap to open Grok")
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setContentIntent(open)
+                .setContentIntent(unlock(context))
                 .setAutoCancel(true)
                 .build(),
         )
+    }
+
+    fun showUnlockFullScreen(context: Context) {
+        val unlock = unlock(context)
+        post(
+            context,
+            WAKE_ID,
+            builder(context, CHANNEL_WAKE)
+                .setContentText("Heard the wake word, unlock to open Grok")
+                .setCategory(NotificationCompat.CATEGORY_REMINDER)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setFullScreenIntent(unlock, true)
+                .setContentIntent(unlock)
+                .setAutoCancel(true)
+                .build(),
+        )
+    }
+
+    fun cancelWake(context: Context) {
+        NotificationManagerCompat.from(context).cancel(WAKE_ID)
     }
 
     fun showGrokMissing(context: Context) {
@@ -108,6 +129,13 @@ object Notifications {
         0,
         Intent(context, MainActivity::class.java),
         PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    private fun unlock(context: Context): PendingIntent = PendingIntent.getActivity(
+        context,
+        0,
+        UnlockActivity.intent(context),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
     // areNotificationsEnabled() is false when POST_NOTIFICATIONS is denied.
