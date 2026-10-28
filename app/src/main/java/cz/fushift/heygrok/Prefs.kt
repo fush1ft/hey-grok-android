@@ -10,9 +10,13 @@ class Prefs(context: Context) {
         get() = prefs.getBoolean("enabled", false)
         set(value) = prefs.edit { putBoolean("enabled", value) }
 
-    var threshold: Float
-        get() = prefs.getFloat("threshold", 0.5f)
-        set(value) = prefs.edit { putFloat("threshold", value) }
+    var phrase: WakePhrase
+        get() = WakePhrase.fromKey(prefs.getString("wake_phrase", null))
+        set(value) = prefs.edit { putString("wake_phrase", value.name) }
+
+    fun threshold(phrase: WakePhrase): Float = prefs.getFloat(phrase.thresholdKey, phrase.defaultThreshold)
+
+    fun setThreshold(phrase: WakePhrase, value: Float) = prefs.edit { putFloat(phrase.thresholdKey, value) }
 
     var chime: Boolean
         get() = prefs.getBoolean("chime", true)

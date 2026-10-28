@@ -3,6 +3,7 @@ package cz.fushift.heygrok.ui
 import app.cash.paparazzi.DeviceConfig
 import app.cash.paparazzi.Paparazzi
 import com.android.resources.NightMode
+import cz.fushift.heygrok.WakePhrase
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -28,14 +29,16 @@ class SettingsScreenshotTest(private val dark: Boolean) {
                     state = SettingsUiState(
                         listening = true,
                         running = true,
-                        threshold = 0.5f,
-                        score = 0.62f,
+                        phrase = WakePhrase.HEY_GROK,
+                        threshold = 0.9f,
+                        score = 0.97f,
                         detected = true,
                         chime = true,
                         startOnBoot = false,
                         grokInstalled = true,
                     ),
                     onListeningChange = {},
+                    onPhraseChange = {},
                     onThresholdChange = {},
                     onChimeChange = {},
                     onStartOnBootChange = {},

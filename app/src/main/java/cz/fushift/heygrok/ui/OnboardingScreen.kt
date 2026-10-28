@@ -22,6 +22,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import cz.fushift.heygrok.Notifications
 import cz.fushift.heygrok.Prefs
 
 private data class SetupStatus(
@@ -29,6 +30,7 @@ private data class SetupStatus(
     val notifications: Boolean,
     val battery: Boolean,
     val overlay: Boolean,
+    val fullScreen: Boolean,
 )
 
 private fun hasPermission(context: Context, permission: String) =
@@ -39,6 +41,7 @@ private fun readStatus(context: Context) = SetupStatus(
     notifications = Build.VERSION.SDK_INT < 33 || hasPermission(context, Manifest.permission.POST_NOTIFICATIONS),
     battery = context.getSystemService<PowerManager>()!!.isIgnoringBatteryOptimizations(context.packageName),
     overlay = Settings.canDrawOverlays(context),
+    fullScreen = Notifications.canUseFullScreenIntent(context),
 )
 
 fun isOnboardingDone(context: Context): Boolean {
@@ -100,10 +103,26 @@ fun OnboardingScreen(onContinue: () -> Unit) {
             done = status.overlay,
             optional = true,
             text = "Android blocks apps from opening other apps from the background. With \"Display over other apps\" " +
-                "allowed, Grok opens directly. Without it, a detection shows a notification you tap to open Grok.",
+                "allowed, Grok opens directly while the phone is unlocked, and it is the fallback for the lock screen. " +
+                "Without it, a detection shows a notification you tap to open Grok.",
             action = "Allow display over other apps",
             onAction = { context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, packageUri)) },
+            restrictedSetting = true,
         )
+        if (Build.VERSION.SDK_INT >= 34) {
+            StepCard(
+                title = "Open on the lock screen",
+                done = status.fullScreen,
+                optional = true,
+                text = "Lets a detection wake the screen and show the unlock prompt, then open Grok. With a PIN, " +
+                    "pattern or fingerprint lock you still unlock first; Grok cannot open over a secure lock screen.",
+                action = "Allow full-screen notifications",
+                onAction = {
+                    context.startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, packageUri))
+                },
+                restrictedSetting = true,
+            )
+        }
 
         PrimaryButton("Continue", onClick = onContinue, modifier = Modifier.fillMaxWidth(), enabled = status.microphone)
     }
@@ -117,7 +136,9 @@ private fun StepCard(
     text: String,
     action: String,
     onAction: () -> Unit,
+    restrictedSetting: Boolean = false,
 ) {
+    val context = LocalContext.current
     FlatCard(
         title = title,
         badge = {
@@ -130,5 +151,14 @@ private fun StepCard(
     ) {
         Caption(text)
         if (!done) PrimaryButton(action, onClick = onAction)
+        // Android 13+ greys out these toggles for sideloaded apps until restricted settings are allowed.
+        if (!done && restrictedSetting) {
+            Caption("If the switch is greyed out: App info > menu (three dots) > Allow restricted settings, then try again.")
+            QuietButton("App info") {
+                context.startActivity(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:${context.packageName}".toUri()),
+                )
+            }
+        }
     }
 }

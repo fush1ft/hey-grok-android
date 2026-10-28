@@ -37,7 +37,7 @@ class WakeWordService : Service() {
             ServiceCompat.startForeground(
                 this,
                 Notifications.LISTENING_ID,
-                Notifications.listening(this),
+                Notifications.listening(this, Prefs(this).phrase),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
             )
         } catch (e: RuntimeException) {
@@ -63,11 +63,12 @@ class WakeWordService : Service() {
     @SuppressLint("MissingPermission")
     private fun listen() {
         val prefs = Prefs(this)
+        var phrase = prefs.phrase
         val detector = WakeWordDetector(
             OrtEnvironment.getEnvironment(),
             asset("melspectrogram.onnx"),
             asset("embedding_model.onnx"),
-            asset("wakeword.onnx"),
+            asset(phrase.asset),
         )
         val minBuffer = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL, ENCODING)
         val record = AudioRecord(
@@ -88,10 +89,15 @@ class WakeWordService : Service() {
             record.startRecording()
             LiveState.running.value = true
             while (readFrame(record, frame)) {
+                if (prefs.phrase != phrase) {
+                    phrase = prefs.phrase
+                    detector.setWakeModel(asset(phrase.asset))
+                    Notifications.updateListening(this, phrase)
+                }
                 val score = detector.process(frame)
                 LiveState.score.value = score
                 val now = SystemClock.elapsedRealtime()
-                if (score >= prefs.threshold && now - lastTrigger >= RETRIGGER_MS) {
+                if (score >= prefs.threshold(phrase) && now - lastTrigger >= RETRIGGER_MS) {
                     lastTrigger = now
                     LiveState.lastDetectionAt.value = now
                     if (prefs.chime) tone.startTone(ToneGenerator.TONE_PROP_ACK, 150)

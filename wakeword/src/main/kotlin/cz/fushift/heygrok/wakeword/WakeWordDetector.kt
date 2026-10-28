@@ -20,8 +20,8 @@ class WakeWordDetector(
 
     private val melSession = env.createSession(melModel)
     private val embeddingSession = env.createSession(embeddingModel)
-    private val wakeSession = env.createSession(wakeModel)
-    private val wakeInputName = wakeSession.inputNames.first()
+    private var wakeSession = env.createSession(wakeModel)
+    private var wakeInputName = wakeSession.inputNames.first()
 
     private val audio = FloatArray(AUDIO_WINDOW)
     private var audioFilled = 0
@@ -42,6 +42,14 @@ class WakeWordDetector(
         melRows.clear()
         repeat(MEL_WINDOW) { melRows.addLast(FloatArray(MEL_BINS) { 1f }) }
         embeddings.clear()
+    }
+
+    fun setWakeModel(wakeModel: ByteArray) {
+        val session = env.createSession(wakeModel)
+        wakeSession.close()
+        wakeSession = session
+        wakeInputName = session.inputNames.first()
+        reset()
     }
 
     /** Returns the wake-word score (0..1) for one 80 ms frame of exactly [FRAME_SIZE] samples. */
